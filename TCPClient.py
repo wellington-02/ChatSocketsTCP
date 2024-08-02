@@ -29,7 +29,7 @@ class SimpleTCPClient:
     def start(self):
         try:
             self.client_socket.connect((self.server_ip, self.server_port))
-            print(f"Connected to server {self.server_ip}:{self.server_port}")
+            print(f"Connected to server successfully")
 
             # Get client IP and port
             self.client_ip, self.client_port = self.client_socket.getsockname()
@@ -38,7 +38,7 @@ class SimpleTCPClient:
             receive_thread.start()
 
             while True:
-                message = input()
+                message = input("Enter message to send: \n")
                 if message.lower() == 'exit':
                     break
                 self.client_socket.sendall(message.encode('utf-8'))

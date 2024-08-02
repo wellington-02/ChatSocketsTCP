@@ -16,7 +16,6 @@ class ClientHandler(threading.Thread):
                     break
                 message = data.decode('utf-8')
                 print(f"Received message from {self.client_address}: {message}")
-                self.server.broadcast(message, self.client_socket, self.client_address)
         except Exception as e:
             print(f"Client handler error: {e}")
         finally:
@@ -29,6 +28,7 @@ class MultiTCPServer:
         self.server_port = server_port
         self.clients = {}
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.is_running = True
 
     def start(self):
         self.server_socket.bind((self.server_ip, self.server_port))
@@ -36,7 +36,7 @@ class MultiTCPServer:
         print(f"Server started on {self.server_ip}:{self.server_port}")
         threading.Thread(target=self.send_messages).start()
         try:
-            while True:
+            while self.is_running:
                 client_socket, client_address = self.server_socket.accept()
                 self.clients[client_address] = client_socket
                 handler = ClientHandler(client_socket, client_address, self)
@@ -44,40 +44,43 @@ class MultiTCPServer:
                 print(f"Connection established with {client_address}")
                 self.list_clients()
         except Exception as e:
-            print(f"Server error: {e}")
+            if self.is_running:
+                print(f"Server error: {e}")
         finally:
-            self.server_socket.close()
+            self.shutdown_server()
 
     def send_messages(self):
         while True:
-            self.list_clients()
-            client_idx = input("Select client index to send message: ")
-            try:
-                client_idx = int(client_idx)
-                client_address = list(self.clients.keys())[client_idx]
-                message = input("Enter message to send: ")
-                self.send_to_client(message, client_address)
-            except (ValueError, IndexError):
-                print("Invalid client index")
+            send = input("Do you want to send a message to a client? (y/n): \n").strip().lower()
+            if send == 'y':
+                if not self.clients:
+                    print("No clients connected. Waiting for clients...")
+                    continue
+                self.list_clients()
+                while True:
+                    try:
+                        client_idx = int(input("Select client index to send message: \n").strip())
+                        client_address = list(self.clients.keys())[client_idx]
+                        message = input("Enter message to send: ").strip()
+                        self.send_to_client(message, client_address)
+                        break
+                    except (ValueError, IndexError):
+                        print("Invalid client index. Please try again.")
+            elif send == 'exit':
+                self.is_running = False
+                self.server_socket.close()
+                break
+            else:
+                print("Invalid input. Please enter 'y' to send a message or 'exit' to close the server.")
 
     def send_to_client(self, message, client_address):
         client_socket = self.clients.get(client_address)
         if client_socket:
             try:
                 client_socket.sendall(f"server: {message}".encode('utf-8'))
-                print(f"Message sent to {client_address}")
+                print(f"Message sent to successfully")
             except Exception as e:
                 print(f"Error sending message to {client_address}: {e}")
-
-    def broadcast(self, message, source_socket=None, source_address=None):
-        for client_address, client_socket in self.clients.items():
-            if client_socket != source_socket:
-                try:
-                    # Include the source address (IP, port) in the message
-                    full_message = f"{source_address[0]}:{source_address[1]} - {message}" if source_address else message
-                    client_socket.sendall(full_message.encode('utf-8'))
-                except Exception as e:
-                    print(f"Broadcast error: {e}")
 
     def remove_client(self, client_socket, client_address):
         if client_address in self.clients and self.clients[client_address] == client_socket:
@@ -86,9 +89,21 @@ class MultiTCPServer:
             self.list_clients()
 
     def list_clients(self):
-        print("Connected clients:")
-        for idx, client_address in enumerate(self.clients.keys()):
-            print(f"{idx}: {client_address}")
+        if self.clients:
+            print("Connected clients:")
+            for idx, client_address in enumerate(self.clients.keys()):
+                print(f"{idx}: {client_address}")
+        else:
+            print("No clients connected.")
+
+    def shutdown_server(self):
+        print("Shutting down server.")
+        for client_socket in self.clients.values():
+            try:
+                client_socket.close()
+            except Exception as e:
+                print(f"Error closing client socket: {e}")
+        self.server_socket.close()
 
 if __name__ == "__main__":
     server = MultiTCPServer('127.0.0.1', 6666)
